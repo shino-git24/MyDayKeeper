@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Day Keeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 日本語フォント設定 */
+        body {
+            font-family: "Inter", "Noto Sans JP", sans-serif;
+        }
+        /* 簡単なローディング表示 */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* メッセージ表示エリア */
+        #message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            display: none; /* 初期状態は非表示 */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        #message-box.success { background-color: #4CAF50; }
+        #message-box.error { background-color: #f44336; }
+        /* Date/Month input を少しスタイリング */
+        input[type="date"], input[type="month"] {
+            appearance: none; -webkit-appearance: none;
+            border: 1px solid #ccc; padding: 8px 12px;
+            border-radius: 6px; cursor: pointer;
+        }
+        /* 検索結果の日付をクリック可能に見せる */
+        .search-result-date, .monthly-entry-date {
+            cursor: pointer; color: #3b82f6; /* blue-500 */
+            text-decoration: underline;
+        }
+        .search-result-date:hover, .monthly-entry-date:hover {
+            color: #2563eb; /* blue-600 */
+        }
+        /* ボタンの無効化スタイル */
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        /* 月間表示エリア */
+        #monthly-view { border-top: 1px solid #e5e7eb; margin-top: 2rem; padding-top: 1.5rem; }
+
+        /* 20250515 ▼▼▼ ここから追加 ▼▼▼ */ 
+     .diary-text-collapsed {
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 5 !important; /* 表示したい行数を5行に設定（例） */
+    overflow: hidden !important;
+    /* text-overflow: ellipsis; */ /* 3点リーダーを表示したい場合はコメント解除 */
+    /* max-height: 100px; */ /* -webkit-line-clamp が効かない場合の代替/補助として行数*line-height程度を指定 */
+    /* line-height: 1.5em; */ /* max-heightと組み合わせる場合に指定 */
+}
+
+.diary-text-expanded {
+    display: block !important;
+    -webkit-line-clamp: unset !important;
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+      .toggle-diary-button {
+    color: #3b82f6;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9em;
+    margin-top: 0.25rem;
+}
+.toggle-diary-button:hover {
+    color: #2563eb;
+}
+      /* ▲▲▲ ここまで追加 ▲▲▲ */
+
+    </style>
+</head>
+<body class="bg-gray-100 p-4 font-sans">
+
+    <div class="container mx-auto max-w-2xl bg-white p-6 rounded-lg shadow-md">
+
+        <h1 class="text-2xl font-bold mb-4 text-center text-gray-700">My Day Keeper</h1>
+
+        <div class="mb-4 text-center flex flex-col sm:flex-row items-center justify-center gap-2">
+             <label for="date-selector" class="text-lg font-medium text-gray-600">表示する日付:</label>
+             <input type="date" id="date-selector" class="border-gray-300 rounded-md shadow-sm">
+        </div>
+        <div class="mb-4 text-center">
+            <p class="text-lg font-semibold text-gray-600" id="current-date"></p>
+        </div>
+
+        <div class="mb-6">
+            <div id="diary-display-area">
+                <label class="block text-lg font-medium text-gray-700 mb-2">日記:</label>
+                <div id="diary-content-display" class="w-full p-3 border border-gray-200 rounded-md bg-gray-50 min-h-[100px] whitespace-pre-wrap">
+                    </div>
+                <button id="edit-diary-button" class="mt-3 w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out" style="display: none;">
+                    この日の日記を編集する
+                </button>
+                <button id="write-diary-button" class="mt-3 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out" style="display: none;">
+                    この日の日記を書く
+                </button>
+            </div>
+
+            <div id="diary-editor-area" style="display: none;">
+                <label for="diary-entry" class="block text-lg font-medium text-gray-700 mb-2">日記:</label>
+                <textarea id="diary-entry" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="出来事を記録しましょう..."></textarea>
+                <button id="save-button" class="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out">
+                    この日の日記を保存する
+                </button>
+                <button id="cancel-edit-button" class="mt-2 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out">
+                    キャンセル
+                </button>
+            </div>
+        </div>
+
+        <div id="past-entries" class="mt-8 border-t pt-6">
+            <h2 class="text-xl font-semibold mb-3 text-gray-700">過去の同じ日の日記</h2>
+            <div id="past-entries-list" class="space-y-4">
+                <p class="text-gray-500">過去の記録を読み込んでいます...</p>
+            </div>
+        </div>
+
+        <div id="monthly-view" class="mt-8 border-t pt-6">
+             <h2 class="text-xl font-semibold mb-3 text-gray-700">月間日記一覧</h2>
+             <div class="flex flex-col sm:flex-row items-center gap-2 mb-4">
+                 <label for="month-selector" class="text-gray-700">表示する年月:</label>
+                 <input type="month" id="month-selector" class="border-gray-300 rounded-md shadow-sm">
+                 <button id="show-month-button" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out">
+                     この月の一覧を表示
+                 </button>
+             </div>
+             <div id="monthly-entries-list" class="space-y-4">
+                 </div>
+        </div>
+
+        <div class="mt-8 border-t pt-6">
+            <h2 class="text-xl font-semibold mb-3 text-gray-700">キーワード検索</h2>
+            <div class="flex gap-2">
+                <input type="text" id="search-keyword" class="flex-grow p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="検索キーワードを入力...">
+                <button id="search-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out">
+                    検索
+                </button>
+            </div>
+            <div id="search-results" class="mt-4 space-y-3"></div>
+        </div>
+
+        <div id="loading" class="loader" style="display: none;"></div>
+
+    </div>
+
+    <div id="message-box"></div>
+
+    <script>
+        // --- DOM要素 ---
+        const currentDateEl = document.getElementById('current-date');
+        const diaryEntryEl = document.getElementById('diary-entry');
+        const saveButton = document.getElementById('save-button');
+        const pastEntriesListEl = document.getElementById('past-entries-list');
+        const loadingEl = document.getElementById('loading');
+        const messageBoxEl = document.getElementById('message-box');
+        const dateSelectorEl = document.getElementById('date-selector');
+        const searchKeywordEl = document.getElementById('search-keyword');
+        const searchButton = document.getElementById('search-button');
+        const searchResultsEl = document.getElementById('search-results');
+        const monthSelectorEl = document.getElementById('month-selector');
+        const showMonthButton = document.getElementById('show-month-button');
+        const monthlyEntriesListEl = document.getElementById('monthly-entries-list');
+
+        // 新しく追加・変更するDOM要素
+        const diaryDisplayAreaEl = document.getElementById('diary-display-area');
+        const diaryContentDisplayEl = document.getElementById('diary-content-display');
+        const editDiaryButton = document.getElementById('edit-diary-button');
+        const writeDiaryButton = document.getElementById('write-diary-button');
+        const diaryEditorAreaEl = document.getElementById('diary-editor-area');
+        const cancelEditButton = document.getElementById('cancel-edit-button');
+
+
+        // --- 状態管理 ---
+        let selectedDate = new Date();
+        let isLoading = false;
+        let currentDiaryText = ''; // 現在表示/編集中の日記内容を保持
+
+        // --- 関数 ---
+
+        /** メッセージ表示 */
+        function showMessage(message, type = 'success', duration = 3000) {
+            messageBoxEl.textContent = message;
+            messageBoxEl.className = `${type} fixed top-5 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-md text-white font-bold z-50 opacity-0 transition-opacity duration-500`;
+            messageBoxEl.style.display = 'block';
+            setTimeout(() => { messageBoxEl.style.opacity = '1'; }, 10);
+            setTimeout(() => {
+                messageBoxEl.style.opacity = '0';
+                setTimeout(() => { messageBoxEl.style.display = 'none'; }, 500);
+            }, duration);
+        }
+
+        /** ローディング制御 */
+        function setLoadingState(loading) {
+            isLoading = loading;
+            loadingEl.style.display = loading ? 'block' : 'none';
+            saveButton.disabled = loading;
+            searchButton.disabled = loading;
+            dateSelectorEl.disabled = loading;
+            monthSelectorEl.disabled = loading;
+            showMonthButton.disabled = loading;
+            editDiaryButton.disabled = loading;
+            writeDiaryButton.disabled = loading;
+            cancelEditButton.disabled = loading;
+        }
+
+        /** 日付を YYYY-MM-DD 形式に */
+        function getFormattedDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        /** YYYY-MM-DD 文字列を Date に */
+        function parseDateString(dateString) {
+            if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return null;
+            const parts = dateString.split('-');
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+            const date = new Date(year, month, day);
+            if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date;
+            return null;
+        }
+
+        /** YYYY-MM 文字列から年と月を取得 */
+        function parseMonthString(monthString) {
+            if (!monthString || !/^\d{4}-\d{2}$/.test(monthString)) return null;
+            const parts = monthString.split('-');
+            return {
+                year: parseInt(parts[0], 10),
+                month: parseInt(parts[1], 10)
+            };
+        }
+
+        /** 日付を M月D日 形式に */
+        function getFormattedMonthDay(date) {
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            return `${m}月${d}日`;
+        }
+
+        /** HTMLエスケープ */
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return '';
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+
+        /** 日本語の曜日を取得 (例: (日) ) */
+        function getJaDayOfWeek(date) {
+            if (!date || typeof date.getDay !== 'function') { // date が null や undefined, または Date オブジェクトでない場合の対策
+                return '';
+            }
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+            return `(${days[date.getDay()]})`;
+        }
+
+        /** 日記表示モードに切り替え */
+        function showDiaryDisplayMode(diaryText) {
+            currentDiaryText = diaryText || ''; // 表示する日記内容を更新
+            diaryContentDisplayEl.innerHTML = currentDiaryText ? escapeHTML(currentDiaryText).replace(/\n/g, '<br>') : '<p class="text-gray-400">この日の日記はありません。</p>';
+            diaryEditorAreaEl.style.display = 'none';
+            diaryDisplayAreaEl.style.display = 'block';
+
+            if (currentDiaryText) {
+                editDiaryButton.style.display = 'block';
+                writeDiaryButton.style.display = 'none';
+            } else {
+                editDiaryButton.style.display = 'none';
+                writeDiaryButton.style.display = 'block';
+            }
+        }
+
+        /** 日記編集モードに切り替え */
+        function showDiaryEditMode() {
+            diaryEntryEl.value = currentDiaryText; // 保持している内容をテキストエリアに設定
+            diaryDisplayAreaEl.style.display = 'none';
+            diaryEditorAreaEl.style.display = 'block';
+            diaryEntryEl.focus();
+        }
+
+
+        /** 指定日の日記と過去日記を読み込み */
+        function loadDiaryData(date) {
+            if (isLoading) return;
+            setLoadingState(true);
+
+            selectedDate = date;
+            const dateStr = getFormattedDate(date);
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            // ▼▼▼ 修正点 ▼▼▼ (テンプレートリテラルのバックスラッシュと中括弧の修正)
+            currentDateEl.textContent = `${date.getFullYear()}年${getFormattedMonthDay(date)} ${getJaDayOfWeek(date)}`;
+            dateSelectorEl.value = dateStr;
+            // diaryEntryEl.value = ''; // 初期化はhandleLoadDiarySuccessで行う
+            pastEntriesListEl.innerHTML = '<p class="text-gray-500">記録を読み込んでいます...</p>';
+            monthlyEntriesListEl.innerHTML = '';
+            searchResultsEl.innerHTML = '';
+            searchKeywordEl.value = '';
+
+            // 最初は日記表示モード
+            diaryEditorAreaEl.style.display = 'none';
+            diaryDisplayAreaEl.style.display = 'block';
+            editDiaryButton.style.display = 'none'; // ボタンは読み込み完了後に表示
+            writeDiaryButton.style.display = 'none'; // ボタンは読み込み完了後に表示
+            diaryContentDisplayEl.innerHTML = '<p class="text-gray-400">日記を読み込んでいます...</p>';
+
+
+            google.script.run
+                .withSuccessHandler(handleLoadDiarySuccess)
+                .withFailureHandler(handleLoadDiaryFailure)
+                .loadDiary({ date: dateStr, month: month, day: day });
+        }
+
+        /** loadDiary 成功時の処理 */
+function handleLoadDiarySuccess(data) {
+    // ▼▼▼ 実験用のコードをここに追加 ▼▼▼
+    console.log(data); 
+    // ▲▲▲ 実験用のコードはここまで ▲▲▲
+    setLoadingState(false);
+    if (data.error) {
+        showMessage(`読み込みエラー: ${data.error}`, 'error');
+        pastEntriesListEl.innerHTML = `<p class="text-red-500">日記の読み込み中にエラーが発生しました。</p>`;
+        diaryContentDisplayEl.innerHTML = '<p class="text-red-500">日記の読み込みに失敗しました。</p>';
+        editDiaryButton.style.display = 'none';
+        writeDiaryButton.style.display = 'block'; 
+        currentDiaryText = ''; 
+        return;
+    }
+
+    const targetDateStr = getFormattedDate(selectedDate);
+    let todayEntryData = null;
+    const pastEntriesData = [];
+
+    // GASから返された全日記データを「今日」と「過去」に振り分ける
+    if (data.allEntries && data.allEntries.length > 0) {
+        data.allEntries.forEach(entry => {
+            if (entry.date === targetDateStr) {
+                todayEntryData = entry; // 今日の日記を確保
+            } else {
+                pastEntriesData.push(entry); // 過去の日記をリストに追加
+            }
+        });
+    }
+
+    // 今日の日記を表示
+    currentDiaryText = todayEntryData ? todayEntryData.text : '';
+    showDiaryDisplayMode(currentDiaryText); 
+
+    // 過去の同じ日の日記を表示
+    pastEntriesListEl.innerHTML = '';
+    if (pastEntriesData.length > 0) {
+        pastEntriesData.sort((a, b) => b.year - a.year); // 年代順にソート
+        pastEntriesData.forEach(entry => {
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'p-3 bg-gray-50 border border-gray-200 rounded-md shadow-sm';
+            entryDiv.innerHTML = `
+                <p class="text-sm font-semibold text-gray-600 mb-1">${entry.year}年 ${getFormattedMonthDay(selectedDate)} ${getJaDayOfWeek(selectedDate)}</p>
+                <p class="text-gray-800 whitespace-pre-wrap">${escapeHTML(entry.text)}</p>
+            `;
+            pastEntriesListEl.appendChild(entryDiv);
+        });
+    } else {
+        pastEntriesListEl.innerHTML = '<p class="text-gray-500">この日の過去の記録はありません。</p>';
+    }
+}
+
+        /** loadDiary 失敗時の処理 */
+        function handleLoadDiaryFailure(error) {
+            setLoadingState(false);
+            console.error("loadDiary Error:", error);
+            showMessage(`読み込みエラー: ${error.message}`, 'error');
+            pastEntriesListEl.innerHTML = `<p class="text-red-500">日記の読み込み中にエラーが発生しました。</p>`;
+            diaryContentDisplayEl.innerHTML = '<p class="text-red-500">日記の読み込みに失敗しました。</p>';
+            editDiaryButton.style.display = 'none';
+            writeDiaryButton.style.display = 'block'; 
+            currentDiaryText = ''; 
+        }
+
+        /** 日記を保存 */
+        function saveDiaryData() {
+            if (isLoading) return;
+            const entryText = diaryEntryEl.value.trim(); 
+            if (!entryText && currentDiaryText.trim() === '' ) { 
+                 showMessage('日記の内容が空です。保存をキャンセルしました。', 'error');
+                 loadDiaryData(selectedDate); 
+                 return;
+            }
+            setLoadingState(true);
+
+            const dateToSave = selectedDate;
+            const payload = {
+                date: getFormattedDate(dateToSave),
+                year: dateToSave.getFullYear(),
+                month: dateToSave.getMonth() + 1,
+                day: dateToSave.getDate(),
+                text: entryText 
+            };
+
+            google.script.run
+                .withSuccessHandler(handleSaveDiarySuccess)
+                .withFailureHandler(handleSaveDiaryFailure)
+                .saveDiary(payload);
+        }
+
+        /** saveDiary 成功時の処理 */
+        function handleSaveDiarySuccess(response) {
+            setLoadingState(false);
+            if (response.error) {
+                showMessage(`保存エラー: ${response.error}`, 'error');
+            } else {
+                showMessage(response.message || '日記を保存しました。', 'success');
+                currentDiaryText = diaryEntryEl.value.trim(); 
+                loadDiaryData(selectedDate); 
+            }
+        }
+
+        /** saveDiary 失敗時の処理 */
+        function handleSaveDiaryFailure(error) {
+            setLoadingState(false);
+            console.error("saveDiary Error:", error);
+            showMessage(`保存エラー: ${error.message}`, 'error');
+        }
+
+        /** キーワード検索 */
+        function searchDiaryData() {
+            if (isLoading) return;
+            const keyword = searchKeywordEl.value.trim();
+            if (!keyword) {
+                showMessage('検索キーワードを入力してください。', 'error');
+                return;
+            }
+            setLoadingState(true);
+            searchResultsEl.innerHTML = '<p class="text-gray-500">検索中...</p>';
+            monthlyEntriesListEl.innerHTML = ''; 
+
+            google.script.run
+                .withSuccessHandler((results) => handleSearchDiarySuccess(results, keyword))
+                .withFailureHandler(handleSearchDiaryFailure)
+                .searchDiary({ keyword: keyword });
+        }
+
+        /** searchDiary 成功時の処理 */
+        function handleSearchDiarySuccess(results, keyword) {
+            setLoadingState(false);
+            if (results.error) {
+                 showMessage(`検索エラー: ${results.error}`, 'error');
+                 searchResultsEl.innerHTML = '<p class="text-red-500">検索中にエラーが発生しました。</p>';
+                 return;
+            }
+            displaySearchResults(results, keyword);
+        }
+
+        /** searchDiary 失敗時の処理 */
+        function handleSearchDiaryFailure(error) {
+            setLoadingState(false);
+            console.error("searchDiary Error:", error);
+            showMessage(`検索エラー: ${error.message}`, 'error');
+            searchResultsEl.innerHTML = '<p class="text-red-500">検索中にエラーが発生しました。</p>';
+        }
+
+        /** 検索結果を表示 */
+        function displaySearchResults(results, keyword) {
+            searchResultsEl.innerHTML = '';
+            if (!results || results.length === 0) {
+                searchResultsEl.innerHTML = `<p class="text-gray-500">「${escapeHTML(keyword)}」に一致する日記は見つかりませんでした。</p>`;
+                return;
+            }
+            results.sort((a, b) => b.date.localeCompare(a.date)); 
+            const resultCountEl = document.createElement('p');
+            resultCountEl.className = 'text-sm text-gray-600 mb-2';
+            resultCountEl.textContent = `「${escapeHTML(keyword)}」の検索結果: ${results.length}件`;
+            searchResultsEl.appendChild(resultCountEl);
+            const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedKeyword})`, 'gi');
+            results.forEach(result => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'p-3 bg-yellow-50 border border-yellow-200 rounded-md shadow-sm';
+                const dateEl = document.createElement('p');
+                dateEl.className = 'text-sm font-semibold text-gray-600 mb-1';
+                
+                const dateLink = document.createElement('span');
+                dateLink.className = 'search-result-date';
+                // ▼▼▼ 修正点 ▼▼▼ (`dconst` -> `const`)
+                const resultDateObj = parseDateString(result.date); 
+                if (resultDateObj) {
+                    dateLink.textContent = `${result.date} ${getJaDayOfWeek(resultDateObj)}`; 
+                } else {
+                    dateLink.textContent = result.date; 
+                }
+                dateLink.onclick = () => {
+                    // ▼▼▼ 修正点 ▼▼▼ (targetDate の再定義は不要、resultDateObj を使う)
+                    if (resultDateObj) { 
+                        loadDiaryData(resultDateObj);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                };
+                dateEl.appendChild(dateLink);
+                const textEl = document.createElement('p');
+                textEl.className = 'text-gray-800 whitespace-pre-wrap';
+                const escapedText = escapeHTML(result.text);
+                textEl.innerHTML = escapedText.replace(regex, '<mark class="bg-yellow-300">$1</mark>');
+                resultDiv.appendChild(dateEl);
+                resultDiv.appendChild(textEl);
+                searchResultsEl.appendChild(resultDiv);
+            });
+        }
+
+        /** 月間日記を読み込み */
+        function loadMonthlyDiaryData() {
+            if (isLoading) return;
+            const monthString = monthSelectorEl.value;
+            const yearMonth = parseMonthString(monthString);
+            if (!yearMonth) {
+                showMessage('表示する年月を選択してください。', 'error');
+                return;
+            }
+            setLoadingState(true);
+            monthlyEntriesListEl.innerHTML = '<p class="text-gray-500">月間日記を読み込んでいます...</p>';
+            searchResultsEl.innerHTML = '';
+
+            google.script.run
+                .withSuccessHandler(handleLoadMonthlyDiarySuccess)
+                .withFailureHandler(handleLoadMonthlyDiaryFailure)
+                .getMonthlyDiary({ year: yearMonth.year, month: yearMonth.month });
+        }
+
+        /** getMonthlyDiary 成功時の処理 */
+        function handleLoadMonthlyDiarySuccess(entries) {
+             setLoadingState(false);
+             if (entries.error) {
+                 showMessage(`月間日記エラー: ${entries.error}`, 'error');
+                 monthlyEntriesListEl.innerHTML = '<p class="text-red-500">月間日記の読み込み中にエラーが発生しました。</p>';
+                 return;
+             }
+             displayMonthlyEntries(entries);
+        }
+
+        /** getMonthlyDiary 失敗時の処理 */
+        function handleLoadMonthlyDiaryFailure(error) {
+            setLoadingState(false);
+            console.error("getMonthlyDiary Error:", error);
+            showMessage(`月間日記エラー: ${error.message}`, 'error');
+            monthlyEntriesListEl.innerHTML = '<p class="text-red-500">月間日記の読み込み中にエラーが発生しました。</p>';
+        }
+
+/** 月間日記を表示 */
+        function displayMonthlyEntries(entries) {
+            monthlyEntriesListEl.innerHTML = '';
+            const monthString = monthSelectorEl.value;
+            const yearMonth = parseMonthString(monthString);
+            if (!entries || entries.length === 0) {
+                monthlyEntriesListEl.innerHTML = `<p class="text-gray-500">${yearMonth.year}年${yearMonth.month}月の日記はありません。</p>`;
+                return;
+            }
+
+            const monthTitle = document.createElement('h3');
+            monthTitle.className = 'text-lg font-semibold text-gray-600 mb-3';
+            monthTitle.textContent = `${yearMonth.year}年${yearMonth.month}月の日記`;
+            monthlyEntriesListEl.appendChild(monthTitle);
+
+            entries.forEach(entry => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm mb-4';
+                const dateObj = parseDateString(entry.date);
+
+                // 日付部分の作成
+                const dateEl = document.createElement('p');
+                dateEl.className = 'text-sm font-semibold text-gray-600 mb-1';
+                const dateLink = document.createElement('span');
+                dateLink.className = 'monthly-entry-date';
+                if (dateObj) {
+                    dateLink.textContent = `${getFormattedMonthDay(dateObj)} ${getJaDayOfWeek(dateObj)} (${entry.date})`;
+                } else {
+                    dateLink.textContent = entry.date;
+                }
+                dateLink.onclick = () => {
+                    if (dateObj) {
+                        loadDiaryData(dateObj);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                };
+                dateEl.appendChild(dateLink);
+                entryDiv.appendChild(dateEl);
+
+                // 要約・本文表示エリアの作成
+                const textEl = document.createElement('p');
+                textEl.className = 'text-gray-800 whitespace-pre-wrap';
+                
+                const summaryText = entry.summary || entry.text.substring(0, 150) + (entry.text.length > 150 ? '...' : '');
+                const fullText = entry.text;
+                let isShowingFullText = false;
+
+                textEl.innerHTML = escapeHTML(summaryText).replace(/\n/g, '<br>');
+                entryDiv.appendChild(textEl);
+                
+                // 本文が空でなければ「本文を見る」ボタンを表示
+                if(fullText.trim()){
+                    const toggleButton = document.createElement('button');
+                    toggleButton.textContent = '本文を見る';
+                    toggleButton.className = 'toggle-diary-button block text-sm mt-1';
+                    
+                    toggleButton.onclick = () => {
+                        if (isShowingFullText) {
+                            textEl.innerHTML = escapeHTML(summaryText).replace(/\n/g, '<br>');
+                            toggleButton.textContent = '本文を見る';
+                            isShowingFullText = false;
+                        } else {
+                            textEl.innerHTML = escapeHTML(fullText).replace(/\n/g, '<br>');
+                            toggleButton.textContent = '要約に戻る';
+                            isShowingFullText = true;
+                        }
+                    };
+                    entryDiv.appendChild(toggleButton);
+                }
+
+                monthlyEntriesListEl.appendChild(entryDiv);
+            });
+        }
+
+
+        // --- 初期化処理 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+            loadDiaryData(todayLocal);
+            monthSelectorEl.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+
+            // イベントリスナー
+            saveButton.addEventListener('click', saveDiaryData);
+            dateSelectorEl.addEventListener('change', (event) => {
+                const selectedDateString = event.target.value;
+                const newDate = parseDateString(selectedDateString);
+                if (newDate) loadDiaryData(newDate);
+                else if (selectedDateString) {
+                     showMessage("無効な日付形式です。", "error");
+                     dateSelectorEl.value = getFormattedDate(selectedDate);
+                }
+            });
+            searchButton.addEventListener('click', searchDiaryData);
+            searchKeywordEl.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') searchDiaryData();
+            });
+            showMonthButton.addEventListener('click', loadMonthlyDiaryData);
+            monthSelectorEl.addEventListener('keypress', (event) => {
+                 if (event.key === 'Enter') loadMonthlyDiaryData();
+            });
+
+            // 「編集」「書く」「キャンセル」ボタンのイベントリスナー
+            editDiaryButton.addEventListener('click', showDiaryEditMode);
+            writeDiaryButton.addEventListener('click', showDiaryEditMode);
+            cancelEditButton.addEventListener('click', () => {
+                showDiaryDisplayMode(currentDiaryText);
+            });
+        });
+    </script>
+
+</body>
+</html>
